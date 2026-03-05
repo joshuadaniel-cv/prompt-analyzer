@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prompt Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #030712; color: #f3f4f6; font-family: system-ui, sans-serif; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #111827; }
+  ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+
+  .header { background: #111827; border-bottom: 1px solid #1f2937; padding: 16px 24px; }
+  .header h1 { font-size: 1.2rem; font-weight: 700; color: #fff; }
+  .header p  { font-size: .8rem; color: #6b7280; margin-top: 2px; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+
+  .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; }
+  .card-head { padding: 12px 16px; border-bottom: 1px solid #1f2937; display: flex; align-items: center; justify-content: space-between; }
+  .card-head span { font-size: .85rem; font-weight: 600; color: #d1d5db; }
+  .card-head small { font-size: .75rem; color: #6b7280; }
+
+  textarea { width: 100%; background: transparent; color: #f3f4f6; font-size: .875rem; padding: 16px; border: none; outline: none; resize: none; font-family: inherit; }
+  textarea::placeholder { color: #4b5563; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:640px){ .grid2 { grid-template-columns: 1fr; } }
+
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; font-size: .85rem; border-bottom: 1px solid #1f2937; }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: #9ca3af; }
+  .row .val   { font-family: monospace; font-weight: 600; color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+  th { text-align: left; padding: 10px 14px; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #1f2937; }
+  th:not(:first-child):not(:nth-child(2)) { text-align: right; }
+  td { padding: 9px 14px; border-bottom: 1px solid #111827; color: #d1d5db; }
+  td:not(:first-child):not(:nth-child(2)) { text-align: right; font-family: monospace; }
+  tr:hover td { background: #1f2937; }
+  tr:last-child td { border-bottom: none; }
+
+  .badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .badge-orange { background: #431407; color: #fb923c; }
+  .badge-green  { background: #052e16; color: #4ade80; }
+  .badge-blue   { background: #172554; color: #60a5fa; }
+
+  .tabs { display: flex; border-bottom: 1px solid #1f2937; }
+  .tab  { padding: 9px 16px; font-size: .85rem; font-weight: 500; cursor: pointer; color: #6b7280; border: none; background: none; border-bottom: 2px solid transparent; transition: all .15s; }
+  .tab:hover  { color: #d1d5db; }
+  .tab.active { color: #fff; border-bottom-color: #3b82f6; background: #1f2937; }
+
+  pre { font-size: .75rem; color: #86efac; font-family: monospace; padding: 16px; overflow-x: auto; max-height: 280px; white-space: pre-wrap; line-height: 1.6; }
+
+  .preview-meta { position: relative; }
+  .preview-tag  { position: absolute; top: 8px; right: 8px; font-size: .7rem; background: #1f2937; color: #6b7280; padding: 3px 8px; border-radius: 6px; }
+
+  .note { padding: 8px 16px; font-size: .72rem; color: #6b7280; border-top: 1px solid #1f2937; }
+
+  .empty { text-align: center; padding: 60px 0; color: #4b5563; }
+  .empty .icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+  .output-row { display: flex; align-items: center; gap: 8px; }
+  .output-row label { font-size: .75rem; color: #6b7280; white-space: nowrap; }
+  .output-row input { width: 90px; background: #1f2937; border: 1px solid #374151; color: #fff; font-size: .75rem; border-radius: 6px; padding: 4px 8px; outline: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const MODELS = [
+  { provider:"Claude", name:"Claude Haiku 3.5",  inp:0.80,  out:4.00  },
+  { provider:"Claude", name:"Claude Sonnet 4",   inp:3.00,  out:15.00 },
+  { provider:"Claude", name:"Claude Opus 4",     inp:15.00, out:75.00 },
+  { provider:"OpenAI", name:"GPT-4o mini",       inp:0.15,  out:0.60  },
+  { provider:"OpenAI", name:"GPT-4o",            inp:2.50,  out:10.00 },
+  { provider:"OpenAI", name:"GPT-4 Turbo",       inp:10.00, out:30.00 },
+  { provider:"Gemini", name:"Gemini 2.0 Flash",  inp:0.10,  out:0.40  },
+  { provider:"Gemini", name:"Gemini 2.5 Pro",    inp:1.25,  out:10.00 },
+  { provider:"Gemini", name:"Gemini Ultra 1.5",  inp:7.00,  out:21.00 },
+];
+
+const BADGES = {
+  Claude: "badge-orange",
+  OpenAI: "badge-green",
+  Gemini: "badge-blue",
+};
+
+function tokens(t){ return Math.ceil(t.length / 4); }
+
+function analyze(t) {
+  if (!t) return null;
+  const chars = t.length;
+  const bytes = new TextEncoder().encode(t).length;
+  const spaces = (t.match(/ /g)||[]).length;
+  const tabs   = (t.match(/\t/g)||[]).length;
+  const newlines = (t.match(/\n/g)||[]).length;
+  const totalWS = chars - t.replace(/\s/g,"").length;
+  const charsNoSpace = chars - totalWS;
+  const words = t.trim() ? t.trim().split(/\s+/).length : 0;
+  const uniqueWords = new Set((t.toLowerCase().match(/\b\w+\b/g)||[])).size;
+  const avgWordLen = words ? (charsNoSpace/words).toFixed(1) : 0;
+  const lines = t.split("\n").length;
+  const sentences = (t.match(/[.!?]+/g)||[]).length;
+  const paragraphs = t.split(/\n\s*\n/).filter(p=>p.trim()).length || (t.trim()?1:0);
+  const punct = (t.match(/[.,!?;:'"()\[\]{}\-–—\/\\@#$%^&*+=|<>~`]/g)||[]).length;
+  const digits = (t.match(/\d/g)||[]).length;
+  const upper = (t.match(/[A-Z]/g)||[]).length;
+  const lower = (t.match(/[a-z]/g)||[]).length;
+  const tok = tokens(t);
+  return {
+    "Characters (total)":chars, "Characters (no spaces)":charsNoSpace,
+    "Bytes (UTF-8)":bytes, Words:words, "Unique words":uniqueWords,
+    "Avg word length":avgWordLen, Lines:lines, Sentences:sentences, Paragraphs:paragraphs,
+    Spaces:spaces, Tabs:tabs, Newlines:newlines, "Total whitespace":totalWS,
+    "Uppercase letters":upper, "Lowercase letters":lower, Digits:digits, Punctuation:punct,
+    "Estimated tokens":tok,
+    "Chunks @ 512 tok":Math.ceil(tok/512),
+    "Chunks @ 1024 tok":Math.ceil(tok/1024),
+    "Chunks @ 2048 tok":Math.ceil(tok/2048),
+  };
+}
+
+const GROUPS = [
+  { label:"📝 Text Structure", keys:["Characters (total)","Characters (no spaces)","Bytes (UTF-8)","Words","Unique words","Avg word length","Lines","Sentences","Paragraphs"] },
+  { label:"⎵ Whitespace",      keys:["Spaces","Tabs","Newlines","Total whitespace"] },
+  { label:"🔤 Characters",     keys:["Uppercase letters","Lowercase letters","Digits","Punctuation"] },
+  { label:"🧩 Tokens & Chunks",keys:["Estimated tokens","Chunks @ 512 tok","Chunks @ 1024 tok","Chunks @ 2048 tok"] },
+];
+
+function fmtCost(c){
+  if(c<0.000001) return "<$0.000001";
+  if(c<0.01) return "$"+c.toFixed(6);
+  return "$"+c.toFixed(4);
+}
+
+function toJSON(m,p){
+  return JSON.stringify({prompt_analysis:{prompt_preview:p.slice(0,80)+(p.length>80?"...":""),metrics:m}},null,2);
+}
+function toMD(m,p){
+  return `# Prompt Analysis\n\n> **Preview:** ${p.slice(0,80)}${p.length>80?"...":""}\n\n## Metrics\n\n| Metric | Value |\n|--------|-------|\n`+Object.entries(m).map(([k,v])=>`| ${k} | ${v} |`).join("\n");
+}
+function toTOML(m,p){
+  const prev = p.slice(0,80).replace(/"/g,'\\"')+(p.length>80?"...":"");
+  return `[prompt_analysis]\nprompt_preview = "${prev}"\n\n[metrics]\n`+Object.entries(m).map(([k,v])=>`${k.replace(/ /g,"_").toLowerCase()} = ${v}`).join("\n");
+}
+function toTOON(m,p){
+  const prev = p.slice(0,80)+(p.length>80?"...":"");
+  const entries = Object.entries(m);
+  return `prompt_analysis:\n  prompt_preview: ${prev}\n\nmetrics[${entries.length}]{key,value}:\n`+entries.map(([k,v])=>`  ${k},${v}`).join("\n");
+}
+
+const FORMATS = ["JSON","Markdown","TOML","TOON"];
+
+function App(){
+  const [prompt, setPrompt] = useState("");
+  const [outTok, setOutTok]  = useState(500);
+  const [fmt, setFmt]        = useState("JSON");
+
+  const metrics = useMemo(()=>analyze(prompt),[prompt]);
+
+  const costs = useMemo(()=>{
+    if(!metrics) return [];
+    const tok = metrics["Estimated tokens"];
+    return MODELS.map(m=>({
+      ...m,
+      ic:(tok/1e6)*m.inp,
+      oc:(outTok/1e6)*m.out,
+      tc:(tok/1e6)*m.inp+(outTok/1e6)*m.out,
+    }));
+  },[metrics,outTok]);
+
+  const preview = useMemo(()=>{
+    if(!metrics) return "";
+    if(fmt==="JSON")     return toJSON(metrics,prompt);
+    if(fmt==="Markdown") return toMD(metrics,prompt);
+    if(fmt==="TOML")     return toTOML(metrics,prompt);
+    if(fmt==="TOON")     return toTOON(metrics,prompt);
+  },[metrics,prompt,fmt]);
+
+  return <>
+    <div className="header">
+      <h1>🔍 Prompt Analyzer</h1>
+      <p>Phase 1 — Objective metrics &amp; cost comparison</p>
+    </div>
+
+    <div className="container">
+      {/* Input */}
+      <div className="card">
+        <div className="card-head">
+          <span>Your Prompt</span>
+          {prompt && <small>{prompt.length} chars</small>}
+        </div>
+        <textarea rows={6} placeholder="Paste or type your LLM prompt here…"
+          value={prompt} onChange={e=>setPrompt(e.target.value)} />
+      </div>
+
+      {metrics ? <>
+        {/* Metric groups */}
+        <div className="grid2">
+          {GROUPS.map(g=>(
+            <div className="card" key={g.label}>
+              <div className="card-head"><span>{g.label}</span></div>
+              {g.keys.map(k=>(
+                <div className="row" key={k}>
+                  <span className="label">{k}</span>
+                  <span className="val">{Number(metrics[k]).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Cost table */}
+        <div className="card">
+          <div className="card-head">
+            <span>💰 Token &amp; Cost Comparison</span>
+            <div className="output-row">
+              <label>Est. output tokens:</label>
+              <input type="number" min="0" max="100000" step="100"
+                value={outTok} onChange={e=>setOutTok(Number(e.target.value))} />
+            </div>
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th><th>Model</th>
+                  <th style={{textAlign:"right"}}>Input tokens</th>
+                  <th style={{textAlign:"right"}}>Input cost</th>
+                  <th style={{textAlign:"right"}}>Output cost</th>
+                  <th style={{textAlign:"right"}}>Total cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {["Claude","OpenAI","Gemini"].flatMap(prov=>{
+                  const rows = costs.filter(c=>c.provider===prov);
+                  return rows.map((c,i)=>(
+                    <tr key={c.name}>
+                      <td>{i===0 && <span className={`badge ${BADGES[prov]}`}>{prov}</span>}</td>
+                      <td>{c.name}</td>
+                      <td>{metrics["Estimated tokens"].toLocaleString()}</td>
+                      <td>{fmtCost(c.ic)}</td>
+                      <td>{fmtCost(c.oc)}</td>
+                      <td style={{color:"#fff",fontWeight:600}}>{fmtCost(c.tc)}</td>
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="note">Prices are approximate based on publicly listed rates. Token count estimated at ~4 chars/token.</div>
+        </div>
+
+        {/* Format preview */}
+        <div className="card">
+          <div className="card-head">
+            <span>📄 Format Preview</span>
+            <small>How your analysis looks in each format</small>
+          </div>
+          <div className="tabs">
+            {FORMATS.map(f=>(
+              <button key={f} className={`tab ${fmt===f?"active":""}`} onClick={()=>setFmt(f)}>{f}</button>
+            ))}
+          </div>
+          <div className="preview-meta">
+            <pre>{preview}</pre>
+            <div className="preview-tag">
+              {(preview||"").length.toLocaleString()} chars · ~{Math.ceil((preview||"").length/4)} tokens
+            </div>
+          </div>
+        </div>
+
+      </> : (
+        <div className="empty">
+          <div className="icon">⌨️</div>
+          <p>Paste a prompt above to start analyzing</p>
+        </div>
+      )}
+    </div>
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
